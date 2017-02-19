@@ -8,7 +8,7 @@ use Module::Runtime    'is_module_name';
 use Return::MultiLevel ();
 use Safe::Isa;
 use Sub::Quote;
-use File::Spec;
+use Path::Tiny         ();
 use Module::Runtime    'use_module';
 use List::Util         ();
 use Ref::Util          qw< is_ref is_globref is_scalarref >;
@@ -246,7 +246,7 @@ sub _build_session_engine {
     # Note that engine options will replace the default session_dir (if provided).
     return $self->_factory->create(
         session         => $value,
-        session_dir     => path( $self->config->{appdir}, 'sessions' ),
+        session_dir     => Path::Tiny::path( $self->config->{appdir}, 'sessions' )->stringify,
         %{$engine_options},
         postponed_hooks => $self->postponed_hooks,
 
@@ -274,7 +274,7 @@ sub _build_template_engine {
     my $engine_attrs = { config => $engine_options };
     $engine_attrs->{layout} ||= $config->{layout};
     $engine_attrs->{views}  ||= $config->{views}
-                            || path( $self->location, 'views' );
+                            || Path::Tiny::path( $self->location, 'views' )->stringify;
     $engine_attrs->{layout_dir} ||= $config->{layout_dir}
                                 || 'layouts';
 
@@ -682,13 +682,13 @@ around execute_hook => sub {
 sub _build_default_config {
     my $self = shift;
 
-    my $public = $ENV{DANCER_PUBLIC} || path( $self->location, 'public' );
+    my $public = $ENV{DANCER_PUBLIC} || Path::Tiny::path( $self->location, 'public' )->stringify;
     return {
         content_type   => ( $ENV{DANCER_CONTENT_TYPE} || 'text/html' ),
         charset        => ( $ENV{DANCER_CHARSET}      || '' ),
         logger         => ( $ENV{DANCER_LOGGER}       || 'console' ),
         views          => ( $ENV{DANCER_VIEWS}
-                            || path( $self->config_location, 'views' ) ),
+                            || Path::Tiny::path( $self->config_location, 'views' )->stringify ),
         environment    => $self->environment,
         appdir         => $self->location,
         public_dir     => $public,
@@ -1031,10 +1031,10 @@ sub send_file {
         }
         # static file dir - either system root or public_dir
         my $dir = $options{system_path}
-            ? File::Spec->rootdir
+            ? Path::Tiny->rootdir
             : $ENV{DANCER_PUBLIC}
                 || $self->config->{public_dir}
-                || path( $self->location, 'public' );
+                || Path::Tiny::path( $self->location, 'public' )->stringify;
 
         $file_path = Dancer2::Handler::File->merge_paths( $path, $dir );
         my $err_response = sub {
@@ -1049,8 +1049,8 @@ sub send_file {
         $err_response->(403) if !-r $file_path;
 
         # Read file content as bytes
-        $fh = Dancer2::FileUtils::open_file( "<", $file_path );
-        binmode $fh;
+        $fh = Path::Tiny::path($file_path)->openr_raw();
+
         $content_type = Dancer2::runner()->mime_type->for_file($file_path) || 'text/plain';
         if ( $content_type =~ m!^text/! ) {
             $charset = $self->config->{charset} || "utf-8";
